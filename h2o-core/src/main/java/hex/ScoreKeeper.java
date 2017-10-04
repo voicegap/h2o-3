@@ -10,6 +10,8 @@ import water.util.MathUtils;
 import java.util.Arrays;
 import java.util.Comparator;
 
+import static hex.ScoreKeeper.StoppingMetric.deviance;
+
 /**
  * Low-weight keeper of scores
  * solely intended for display (either direct or as helper to create scoring history TwoDimTable).
@@ -105,7 +107,7 @@ public class ScoreKeeper extends Iced {
     if (len < 2*k) return false; //need at least k for SMA and another k to tell whether the model got better or not
 
     if (criterion==StoppingMetric.AUTO) {
-      criterion = classification ? StoppingMetric.logloss : StoppingMetric.deviance;
+      criterion = classification ? StoppingMetric.logloss : deviance;
     }
 
     boolean moreIsBetter = moreIsBetter(criterion);
@@ -191,7 +193,8 @@ public class ScoreKeeper extends Iced {
       Log.info("Windowed averages (window size " + k + ") of " + what + " " + (k+1) + " " + criterion.toString() + " metrics: " + Arrays.toString(movingAvg));
 
     double ratio = bestInLastK / lastBeforeK;
-    if (Double.isNaN(ratio)) return false;
+    if (Double.isNaN(ratio))
+      return !(moreIsBetter || criterion.equals(deviance));  // lastBeforeK=0 for less is better, no more improvement possible, return true
     boolean improved = moreIsBetter ? ratio > 1+rel_improvement : ratio < 1-rel_improvement;
 
     if (verbose)
