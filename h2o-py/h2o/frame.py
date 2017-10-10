@@ -1881,7 +1881,7 @@ class H2OFrame(object):
 
     def merge(self, other, all_x=False, all_y=False, by_x=None, by_y=None, method="auto"):
         """
-        Merge two datasets based on common column names.
+        Merge two datasets based on common column names.  We do not support all_x=True and all_y=True.  Only one can be True or none is True
 
         :param H2OFrame other: The frame to merge to the current one. By default, must have at least one column in common with
             this frame, and all columns in common are used as the merge key.  If you want to use only a subset of the
