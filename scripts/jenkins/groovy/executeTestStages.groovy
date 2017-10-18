@@ -263,31 +263,50 @@ def defaultTestPipeline(nodeLabel, body) {
     def insideDocker = load('h2o-3/scripts/jenkins/groovy/insideDocker.groovy')
     def buildTarget = load('h2o-3/scripts/jenkins/groovy/buildTarget.groovy')
     def customEnv = load('h2o-3/scripts/jenkins/groovy/customEnv.groovy')
+    def commitMessage = load('h2o-3/scripts/jenkins/groovy/commitMessage.groovy')
 
     def buildEnv = customEnv() + ["PYTHON_VERSION=${config.pythonVersion}", "R_VERSION=${config.rVersion}"]
 
     insideDocker(buildEnv, config.timeoutValue, 'MINUTES') {
       stage(config.stageName) {
-        def stageDir = stageNameToDirName(config.stageName)
-        def h2oFolder = stageDir + '/h2o-3'
-        dir(stageDir) {
-          deleteDir()
+        // first check the commit message contains #rerun token,
+        // if not, then run all stages
+        def runAllStages = !commitMessage().contains('#rerun')
+        // if we shouldn't run all stages based on the commit message, check
+        // that this is not overriden by environment
+        if (!runAllStages) {
+          runAllStages = env.runAllStages.toLowerCase() == 'true'
         }
-
-        unpackTestPackage(config.lang, stageDir)
-
-        if (config.lang == 'py') {
-          installPythonPackage(h2oFolder)
+        if (runAllStages) {
+          echo "###### RERUN NOT ENABLED, will execute all stages ######"
+        } else {
+          echo "###### RERUN ENABLED, will execute only stages which failed in previous build ######"
         }
+        // execute stage if we should execute all stages or the stage was not successful in previous buildNumber
+        if(runAllStages || !wasStageSuccessful(config.stageName)) {
+          def stageDir = stageNameToDirName(config.stageName)
+          def h2oFolder = stageDir + '/h2o-3'
+          dir(stageDir) {
+            deleteDir()
+          }
 
-        if (config.lang == 'r') {
-          installRPackage(h2oFolder)
-        }
+          unpackTestPackage(config.lang, stageDir)
 
-        buildTarget {
-          target = config.target
-          hasJUnit = config.hasJUnit
-          h2o3dir = h2oFolder
+          if (config.lang == 'py') {
+            installPythonPackage(h2oFolder)
+          }
+
+          if (config.lang == 'r') {
+            installRPackage(h2oFolder)
+          }
+
+          buildTarget {
+            target = config.target
+            hasJUnit = config.hasJUnit
+            h2o3dir = h2oFolder
+          }
+        } else {
+          echo "${config.stageName} was successful in previous build, skipping it in this build because RERUN FAILED STAGES is enabled"
         }
       }
     }
@@ -327,6 +346,37 @@ def stageNameToDirName(String stageName) {
     return stageName.toLowerCase().replace(' ', '-')
   }
   return null
+}
+
+@NonCPS
+def wasStageSuccessful(String stageName) {
+  // displayName of the relevant end node.
+  def STAGE_END_TYPE_DISPLAY_NAME = 'Stage : Body : End'
+
+  // There is no previous build, the stage cannot be successful.
+  if (currentBuild.previousBuild == null) {
+    return false
+  }
+
+  // Get all nodes in previous build.
+  def prevBuildNodes = currentBuild.previousBuild.rawBuild
+    .getAction(org.jenkinsci.plugins.workflow.job.views.FlowGraphAction.class)
+    .getNodes()
+  // Get all end nodes of the relevant stage in previous build. We need to check
+  // the end nodes, because errors are being recorded on the end nodes.
+  def stageEndNodesInPrevBuild = prevBuildNodes.findAll{it.getTypeDisplayName() == STAGE_END_TYPE_DISPLAY_NAME}
+    .findAll{it.getStartNode().getDisplayName() == stageName}
+
+  // If there is no start node for this stage in previous build, that means the
+  // stage was not present in previous build, therefore the stage cannot be successful.
+  def stageMissingInPrevBuild = stageEndNodesInPrevBuild.isEmpty()
+  if (stageMissingInPrevBuild) {
+    return false
+  }
+
+  // If the list of end nodes for this stage having error is empty, that
+  // means the stage was successful. The errors are being recorded on the end nodes.
+  return stageEndNodesInPrevBuild.find{it.getError() != null} == null
 }
 
 return this
