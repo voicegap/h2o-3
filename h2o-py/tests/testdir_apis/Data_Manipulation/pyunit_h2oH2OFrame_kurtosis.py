@@ -11,7 +11,7 @@ def h2o_H2OFrame_kurtosis():
     """
     Python API test: h2o.frame.H2OFrame.kurtosis(na_rm=False)
     """
-    python_lists = np.random.normal(0,1, (10000, 1))
+    python_lists = np.random.normal(0,1, (30000, 1))
     h2oframe = h2o.H2OFrame(python_obj=python_lists)
     clist = h2oframe.kurtosis(na_rm=True)
 
