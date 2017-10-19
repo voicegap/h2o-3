@@ -1,6 +1,7 @@
 def DEFAULT_NODE_LABEL = 'docker && !mr-0xc8 && !mr-0xg2'
 
 def executeTestStages = null
+def changesMap = null
 
 ansiColor('xterm') {
   timestamps {
@@ -23,6 +24,9 @@ ansiColor('xterm') {
         }
       }
 
+      def detectChanges = load('h2o-3/scripts/jenkins/groovy/detectChanges.groovy')
+      changesMap = detectChanges()
+
       def setJobProperties = load('h2o-3/scripts/jenkins/groovy/setJobProperties.groovy')
       setJobProperties()
 
@@ -33,7 +37,7 @@ ansiColor('xterm') {
       executeTestStages = load('h2o-3/scripts/jenkins/groovy/executeTestStages.groovy')
     }
 
-    executeTestStages('MODE_PR_TESTING', DEFAULT_NODE_LABEL)
+    executeTestStages('MODE_PR_TESTING', DEFAULT_NODE_LABEL, changesMap)
   }
 }
 

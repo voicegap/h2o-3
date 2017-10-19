@@ -1,4 +1,4 @@
-def call(mode, nodeLabel) {
+def call(mode, nodeLabel, changesMap) {
 
   def MODE_PR_TESTING_CODE = -1
   def MODE_PR_CODE = 0
@@ -212,14 +212,14 @@ def call(mode, nodeLabel) {
       jobs += NIGHTLY_STAGES
     }
   }
-  executeInParallel(jobs, nodeLabel)
+  executeInParallel(jobs, nodeLabel, changesMap)
 }
 
-def executeInParallel(jobs, nodeLabel) {
+def executeInParallel(jobs, nodeLabel, changesMap = null) {
   parallel(jobs.collectEntries { c ->
     [
       c['stageName'], {
-        defaultTestPipeline(nodeLabel) {
+        defaultTestPipeline(nodeLabel, changesMap) {
           stageName = c['stageName']
           target = c['target']
           pythonVersion = c['pythonVersion']
@@ -233,7 +233,7 @@ def executeInParallel(jobs, nodeLabel) {
   })
 }
 
-def defaultTestPipeline(nodeLabel, body) {
+def defaultTestPipeline(nodeLabel, changesMap, body) {
   def config = [:]
   body.resolveStrategy = Closure.DELEGATE_FIRST
   body.delegate = config
@@ -268,26 +268,31 @@ def defaultTestPipeline(nodeLabel, body) {
 
     insideDocker(buildEnv, config.timeoutValue, 'MINUTES') {
       stage(config.stageName) {
-        def stageDir = stageNameToDirName(config.stageName)
-        def h2oFolder = stageDir + '/h2o-3'
-        dir(stageDir) {
-          deleteDir()
-        }
+        if (changesMap[config.lang] != null && changesMap[config.lang]) {
+          echo "###### Changes for ${config.lang} detected, starting ${config.stageName}######"
+          def stageDir = stageNameToDirName(config.stageName)
+          def h2oFolder = stageDir + '/h2o-3'
+          dir(stageDir) {
+            deleteDir()
+          }
 
-        unpackTestPackage(config.lang, stageDir)
+          unpackTestPackage(config.lang, stageDir)
 
-        if (config.lang == 'py') {
-          installPythonPackage(h2oFolder)
-        }
+          if (config.lang == 'py') {
+            installPythonPackage(h2oFolder)
+          }
 
-        if (config.lang == 'r') {
-          installRPackage(h2oFolder)
-        }
+          if (config.lang == 'r') {
+            installRPackage(h2oFolder)
+          }
 
-        buildTarget {
-          target = config.target
-          hasJUnit = config.hasJUnit
-          h2o3dir = h2oFolder
+          buildTarget {
+            target = config.target
+            hasJUnit = config.hasJUnit
+            h2o3dir = h2oFolder
+          }
+        } else {
+          echo "###### No changes for ${config.lang}, skipping ${config.stageName}######"
         }
       }
     }
